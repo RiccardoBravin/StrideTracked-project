@@ -15,19 +15,12 @@
 */
 
 #include <Arduino_LSM9DS1.h>
-#include <ArduinoBLE.h>
 
-BLEService labelService("19B10010-E8F2-537E-4F6C-D104768A1214");  // create service
-
-// create label switch characteristic and allow remote device to read and write
-BLEByteCharacteristic labelCharacteristic("19B10011-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite);
-// create button characteristic and allow remote device to get notifications
-//BLEByteCharacteristic buttonCharacteristic("19B10012-E8F2-537E-4F6C-D104768A1214", BLERead | BLENotify);
-
+int oldT = 0;
 
 void setup() {
 
-  Serial.begin(19200);
+  Serial.begin(57600);
   while (!Serial)
     ;  //serial start failed
 
@@ -36,17 +29,16 @@ void setup() {
   //Imu start check
   if (!IMU.begin()) {
     Serial.println("Failed to initialize IMU!");
-    while (1)
-      ;
+    while (1);
   }
 
   /******  FS  Full Scale         range 0:±2g | 1:±24g | 2: ±4g | 3: ±8g  (default=2)                                           ******
   ******                          range 0: 245 dps | 1: 500 dps | 2: 1000  dps | 3: 2000 dps                                    ******
   *******  ODR Output Data Rate   range 0:off | 1:10Hz | 2:50Hz | 3:119Hz | 4:238Hz | 5:476Hz, (default=3)(not working 6:952Hz) ******/
   IMU.setAccelFS(0);   //best accuracy at 0
-  IMU.setAccelODR(5);  //best refreshrate at 6 (if Gyro OFF?)
+  IMU.setAccelODR(4);  //best refreshrate at 6 (if Gyro OFF?)
   IMU.setGyroFS(0);
-  IMU.setGyroODR(5);
+  IMU.setGyroODR(4);
 
   /*******************    For an improved accuracy run the DIY_Calibration_Accelerometer sketch first.     ****************
   ********************         Copy/Replace the lines below by the code output of the program              ****************/
@@ -58,34 +50,6 @@ void setup() {
   IMU.accelUnit = GRAVITY;         // GRAVITY=1 or  METERPERSECOND2=9.81
   IMU.gyroUnit = DEGREEPERSECOND;  //   DEGREEPERSECOND  RADIANSPERSECOND  REVSPERMINUTE  REVSPERSECOND
 
-  //----------------------------- BLE setup -----------------------------//
-
-  //Bluetooth start check
-  if (!BLE.begin()) {
-    Serial.println("starting Bluetooth® Low Energy module failed!");
-    while (1);
-  }
-
-  // set the local name peripheral advertises
-  BLE.setLocalName("LabelSwitch");
-  // set the UUID for the service this peripheral advertises:
-  BLE.setAdvertisedService(labelService);
-
-  // add the characteristics to the service
-  labelService.addCharacteristic(labelCharacteristic);
-
-  // add the service
-  BLE.addService(labelService);
-
-  //define starting value for label
-  labelCharacteristic.writeValue(-1);
-  
-
-  // start advertising
-  BLE.advertise();
-
-  Serial.println("Bluetooth® device active, waiting for connections...");
-
 
   // print IMU starting status
   Serial.print("Accelerometer Full Scale = ±");
@@ -94,7 +58,7 @@ void setup() {
   Serial.print("Accelerometer sample rate = ");
   Serial.print(IMU.getAccelODR());
   Serial.println(" Hz \n");
-  delay(4000);
+  delay(1000);
 
   Serial.println(" X \t Y \t Z ");
 }
@@ -102,35 +66,28 @@ void setup() {
 
 void loop() {
   //define variables for IMU reads
-  float ax, ay, az, gx, gy, gz;
-  static int8_t label = 0;
+  int16_t acc[3], gyro[3];
 
-  //poll for Bluetooth® Low Energy events
-  BLE.poll();
+  if (IMU.accelAvailable() && IMU.gyroAvailable()) {
 
-  if (labelCharacteristic.written()) {
-    label = labelCharacteristic.value();
-  }
-
-  if (label != -1 && IMU.accelAvailable() && IMU.gyroAvailable()) {
-
-    IMU.readAccel(ax, ay, az);
-    IMU.readGyro(gx, gy, gz);
+    IMU.readRawAccelArr(acc);
+    IMU.readRawGyroArr(gyro);
     
-    //Serial.write(millis());
-    //Serial.print('\n');
-    Serial.print(ax,6);
+    // ---  to be sure that the out buffer is actually filled uncomment millis and 
+    // ---  verify that it acutually is 1/f from serial monitor 
+    //Serial.println(millis() - oldT);
+    //oldT = millis();
+    Serial.print(acc[0]);
     Serial.print('\t');
-    Serial.print(ay,6);
+    Serial.print(acc[1]);
     Serial.print('\t');
-    Serial.print(az,6);
+    Serial.print(acc[2]);
     Serial.print('\t');
-    Serial.print(gx,6);
+    Serial.print(gyro[0]);
     Serial.print('\t');
-    Serial.print(gy,6);
+    Serial.print(gyro[1]);
     Serial.print('\t');
-    Serial.print(gz,6);
-    Serial.print('\t');
-    Serial.println(label);
+    Serial.println(gyro[2]);
+
   }
 }
