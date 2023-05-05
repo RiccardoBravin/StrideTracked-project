@@ -59,7 +59,7 @@ void draw() {
     
     if (dataRead != null) {
       
-      String line = dataRead.substring(0,dataRead.length()-2);
+      String line = dataRead.substring(0,dataRead.length()-1).concat("\t");
       
       line = line.concat(str(label)).concat("\n");
       
@@ -128,6 +128,7 @@ void keyPressed() {
       do {
         //change path to other in case of errors
         fileOut = new File("C:\\Users\\Riccardo Bravin\\Desktop\\ardu project\\arduino_serial_saver\\samples\\label" + label + "_" + x + ".csv");
+        //fileOut = new File("C:\\Users\\caser\\Documents\\POLIMI\\HW-EDGE-AI\\projectWalk\\DataCollected\\label" + label + "_" + x + ".csv");
         x++;
       } while (!fileOut.createNewFile());
 
