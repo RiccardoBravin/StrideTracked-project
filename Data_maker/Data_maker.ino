@@ -60,7 +60,7 @@ void setup() {
   Serial.println(" Hz \n");
   delay(1000);
 
-  Serial.println(" X \t Y \t Z ");
+  //Serial.println(" X \t Y \t Z ");
 }
 
 
@@ -75,13 +75,13 @@ void loop() {
     
     // ---  to be sure that the out buffer is actually filled uncomment millis and 
     // ---  verify that it acutually is 1/f from serial monitor 
-    deltaT = millis() - oldT;
-    oldT = millis();
+    //deltaT = millis() - oldT;
+    //oldT = millis();
 
     char output[100]; //dimensione arbitraria
     sprintf(output, "%d\t%d\t%d\t%d\t%d\t%d\n", acc[0], acc[1], acc[2], gyro[0], gyro[1], gyro[2]);
     //Serial.print(deltaT);
     //Serial.print("\t"); //tab to separate deltaT from other sensors values
-    Serial.println(output); //print the string
+    Serial.print(output); //print the string
   }
 }

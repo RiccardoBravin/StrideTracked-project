@@ -8,5 +8,5 @@
 note aggiuntive:
 Francesca Greco e Elisa Ciotti :scalze e scarpe da ginnastica [stessa superficie]
 Francesco: Scalzo,scarpe,ciabatte,pantofole [stessa superficie]
-Riccardo: [diverse superifici]
+Riccardo: [diverse superifici]+[Sacile e Milano]
 Elia:	[diverse superfici]
