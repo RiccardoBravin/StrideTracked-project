@@ -4,6 +4,6 @@ Label 1: the arduino sitting on the desk with one person in the room using the d
 
 Label 2_R: stepping around the room while the arduino is sitting on different surfaces (kitchen, desk, chair, bed)
 
-Label 3: Riccardo in the kitchen doing things
+Label 3: Francesco stepping with different shoes or bare footed with artuino on TV stand
 
 Label 4_E: Elia Stepping around the room while arduino sitting on different surfaces
