@@ -4,8 +4,8 @@
 #include "stride_model.h"
 #include "tensorflow/lite/micro/all_ops_resolver.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
-#include "tensorflow/lite/micro/micro_log.h"
-#include "tensorflow/lite/micro/system_setup.h"
+//#include "tensorflow/lite/micro/micro_log.h"
+//#include "tensorflow/lite/micro/system_setup.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 
 // Globals, used for compatibility with Arduino-style sketches.
@@ -29,16 +29,16 @@ namespace {
 void setup() {
   // put your setup code here, to run once:
 
-  tflite::InitializeTarget();
+  //tflite::InitializeTarget(); NON LO TROVA E CREDO NON SERVA
 
   // Map the model into a usable data structure. This doesn't involve any
   // copying or parsing, it's a very lightweight operation.
   model = tflite::GetModel(stride_model);
-  if (model->version() != TFLITE_SCHEMA_VERSION) {
+  if (model->version() != 3) { //impostato TFLITE_SCHEMA_VERSION = 3 preso dagli esempi
     MicroPrintf( //forse meglio mettere error_reporter
         "Model provided is schema version %d not equal "
         "to supported version %d.",
-        model->version(), TFLITE_SCHEMA_VERSION);
+        model->version(), 3);
     return;
   }
 
@@ -155,6 +155,7 @@ void loop() {
     }
     media[i] /= 500.0;
   }
+
   for (int i = 0; i < 6; i++) {
     for (int j = 0; j < 500; j++) {
       stdev[i] += (data[j][i] - media[i]) * (data[j][i] - media[i]);
