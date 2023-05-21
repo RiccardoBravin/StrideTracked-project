@@ -4,9 +4,12 @@
 #include "stride_model.h"
 #include "tensorflow/lite/micro/all_ops_resolver.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
-//#include "tensorflow/lite/micro/micro_log.h"
+#include "tensorflow/lite/micro/micro_log.h" //in quella di Harvard copiare micro_log.h e .cpp (si trova in TFLite libreria)
+#include "tensorflow/lite/micro/micro_error_reporter.h"
 //#include "tensorflow/lite/micro/system_setup.h"
 #include "tensorflow/lite/schema/schema_generated.h"
+
+//https://stackoverflow.com/questions/66664484/tensorflow-lite-on-arduino-nano-33-ble-didnt-find-op-for-builtin-opcode-expa
 
 // Globals, used for compatibility with Arduino-style sketches.
 namespace {
@@ -19,7 +22,7 @@ namespace {
   //RecognizeCommands* recognizer = nullptr;
   int inference_count = 0; //serve?
 
-  constexpr int kTensorArenaSize = 10*1024;
+  constexpr int kTensorArenaSize = 100*1024;
   // Keep aligned to 16 bytes for CMSIS
   alignas(16) uint8_t tensor_arena[kTensorArenaSize];
   //int8_t feature_buffer[kFeatureElementCount]; //messo nelle slide
@@ -28,45 +31,7 @@ namespace {
 
 void setup() {
   // put your setup code here, to run once:
-
-  //tflite::InitializeTarget(); NON LO TROVA E CREDO NON SERVA
-
-  // Map the model into a usable data structure. This doesn't involve any
-  // copying or parsing, it's a very lightweight operation.
-  model = tflite::GetModel(stride_model);
-  if (model->version() != 3) { //impostato TFLITE_SCHEMA_VERSION = 3 preso dagli esempi
-    MicroPrintf( //forse meglio mettere error_reporter
-        "Model provided is schema version %d not equal "
-        "to supported version %d.",
-        model->version(), 3);
-    return;
-  }
-
-  // This pulls in all the operation implementations we need.
-  // NOLINTNEXTLINE(runtime-global-variables)
-  static tflite::AllOpsResolver resolver; //poi possiamo farlo riga per riga per ottimizzare
-
-  // Build an interpreter to run the model with.
-  static tflite::MicroInterpreter static_interpreter(model, resolver, tensor_arena, kTensorArenaSize); //error_resolver non riesco a metterlo
-  interpreter = &static_interpreter;
-
-  // Allocate memory from the tensor_arena for the model's tensors.
-  TfLiteStatus allocate_status = interpreter->AllocateTensors();
-  if (allocate_status != kTfLiteOk) {
-    TF_LITE_REPORT_ERROR(error_reporter, "AllocateTensors() failed");
-    return;
-  }
-
-  // Obtain pointers to the model's input and output tensors.
-  model_input = interpreter->input(0);
-  //vedere se aggiungere if slide
-  model_input_buffer = reinterpret_cast<float*>(model_input->data.int8);
-  model_output = interpreter->output(0);
-
-  // Keep track of how many inferences we have performed.
-  inference_count = 0;
-
-  //serial start
+    //serial start
   Serial.begin(57600);
   while (!Serial)
     ;  //serial start failed
@@ -108,6 +73,46 @@ void setup() {
   delay(1000);
 
   //Serial.println(" X \t Y \t Z ");
+
+  //tflite::InitializeTarget(); NON LO TROVA E CREDO NON SERVA
+  static tflite::MicroErrorReporter micro_error_reporter;
+  error_reporter = &micro_error_reporter;
+  // // Map the model into a usable data structure. This doesn't involve any
+  // // copying or parsing, it's a very lightweight operation.
+  model = tflite::GetModel(stride_model);
+  if (model->version() != 3) { //impostato TFLITE_SCHEMA_VERSION = 3 preso dagli esempi
+    TF_LITE_REPORT_ERROR(error_reporter,
+                         "Model provided is schema version %d not equal "
+                         "to supported version %d.",
+                         model->version(), 3);
+    return;
+  }
+
+  // This pulls in all the operation implementations we need.
+  // NOLINTNEXTLINE(runtime-global-variables)
+  static tflite::AllOpsResolver resolver; //poi possiamo farlo riga per riga per ottimizzare
+
+  // Build an interpreter to run the model with.
+  static tflite::MicroInterpreter static_interpreter(model, resolver, tensor_arena, kTensorArenaSize, error_reporter); //error_resolver non riesco a metterlo
+  interpreter = &static_interpreter;
+
+  // Allocate memory from the tensor_arena for the model's tensors.
+  TfLiteStatus allocate_status = interpreter->AllocateTensors();
+  if (allocate_status != kTfLiteOk) {
+    TF_LITE_REPORT_ERROR(error_reporter, "AllocateTensors() failed");
+    return;
+  }
+
+  // Obtain pointers to the model's input and output tensors.
+  model_input = interpreter->input(0);
+  //vedere se aggiungere if slide
+  model_input_buffer = reinterpret_cast<float*>(model_input->data.int8);
+  model_output = interpreter->output(0);
+
+  // Keep track of how many inferences we have performed.
+  inference_count = 0;
+
+
     
 
 }
@@ -147,23 +152,27 @@ void loop() {
   }
 
   // Calcola media e deviazione standard
-  float media[6] = {0.0};
-  float stdev[6] = {0.0};
-  for (int i = 0; i < 6; i++) {
-    for (int j = 0; j < 500; j++) {
-      media[i] += data[j][i];
-    }
-    media[i] /= 500.0;
-  }
+  // float media[6] = {0.0};
+  // float stdev[6] = {0.0};
+  // for (int i = 0; i < 6; i++) {
+  //   for (int j = 0; j < 500; j++) {
+  //     media[i] += data[j][i];
+  //   }
+  //   media[i] /= 500.0;
+  // }
 
-  for (int i = 0; i < 6; i++) {
-    for (int j = 0; j < 500; j++) {
-      stdev[i] += (data[j][i] - media[i]) * (data[j][i] - media[i]);
-    }
-    stdev[i] = sqrt(stdev[i] / 500.0);
-  }
+  // for (int i = 0; i < 6; i++) {
+  //   for (int j = 0; j < 500; j++) {
+  //     stdev[i] += (data[j][i] - media[i]) * (data[j][i] - media[i]);
+  //   }
+  //   stdev[i] = sqrt(stdev[i] / 500.0);
+  // }
 
   // Normalizza i dati
+  // Definizione delle variabili media e deviazione standard del training set
+  float media[] = {2.06853779e+02, 2.38505983e+02, 1.60015700e+04, 6.80661577e+01, 8.75363917e+01, -2.57372471e+01, 3.05424657e+00};
+  float stdev[] = {480.24286526, 366.15700767, 68.46725852, 28.72658113, 19.91091629, 16.62562744, 2.375685};
+
   for (int i = 0; i < 500; i++) {
     for (int j = 0; j < 6; j++) {
       data[i][j] = (data[i][j] - media[j]) / stdev[j];
