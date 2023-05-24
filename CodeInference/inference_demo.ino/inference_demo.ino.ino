@@ -190,20 +190,21 @@ void loop() {
   //memcpy(model_input_buffer, data, sizeof(float) * 500 * 6); //QUESTO NON FUNZIONA
 
   //only to check
+  char[] toPrint;
   for (int i = 0; i < 500; i++) {
     for (int j = 0; j < 6; j++) {
-      Serial.print(model_input_buffer[i * 6 + j]);
+      Serial.print(model_input_buffer[i * 6 + j],6);
       Serial.print("\t");
     }
     Serial.println();
   }
-  
+
   Serial.println();
   Serial.println();
 
   for (int i = 0; i < 500; i++) {
     for (int j = 0; j < 6; j++) {
-      Serial.print(data[i][j]);
+      Serial.print(data[i][j],6);
       Serial.print("\t");
     }
     Serial.println();
