@@ -22,6 +22,10 @@ namespace {
   //RecognizeCommands* recognizer = nullptr;
   int inference_count = 0; //serve?
 
+  //media and stdev of the training set
+  float media[] = {2.06853779e+02, 2.38505983e+02, 1.60015700e+04, 6.80661577e+01, 8.75363917e+01, -2.57372471e+01, 3.05424657e+00};
+  float stdev[] = {480.24286526, 366.15700767, 68.46725852, 28.72658113, 19.91091629, 16.62562744, 2.375685};
+
   constexpr int kTensorArenaSize = 100*1024;
   // Keep aligned to 16 bytes for CMSIS
   alignas(16) uint8_t tensor_arena[kTensorArenaSize];
@@ -106,15 +110,12 @@ void setup() {
   // Obtain pointers to the model's input and output tensors.
   model_input = interpreter->input(0);
   //vedere se aggiungere if slide
-  model_input_buffer = reinterpret_cast<float*>(model_input->data.int8);
+  //model_input_buffer = reinterpret_cast<float*>(model_input->data.int8);
+  model_input_buffer = model_input->data.f;
   model_output = interpreter->output(0);
 
   // Keep track of how many inferences we have performed.
   inference_count = 0;
-
-
-    
-
 }
 
 void loop() {
@@ -169,17 +170,14 @@ void loop() {
   // }
 
   // Normalizza i dati
-  // Definizione delle variabili media e deviazione standard del training set
-  float media[] = {2.06853779e+02, 2.38505983e+02, 1.60015700e+04, 6.80661577e+01, 8.75363917e+01, -2.57372471e+01, 3.05424657e+00};
-  float stdev[] = {480.24286526, 366.15700767, 68.46725852, 28.72658113, 19.91091629, 16.62562744, 2.375685};
-
+  // Definizione delle variabili media e deviazione standard del training set (vedi in setup())
   for (int i = 0; i < 500; i++) {
     for (int j = 0; j < 6; j++) {
       data[i][j] = (data[i][j] - media[j]) / stdev[j];
     }
   }
 
-  // Prepara il tensore di input per l'inferenza
+  //Prepara il tensore di input per l'inferenza
   int input_index = 0;
   for (int i = 0; i < 500; i++) {
     for (int j = 0; j < 6; j++) {
@@ -187,7 +185,30 @@ void loop() {
       input_index++;
     }
   }
+
+  // Copia i dati di input nell'array del tensore
+  //memcpy(model_input_buffer, data, sizeof(float) * 500 * 6); //QUESTO NON FUNZIONA
+
+  //only to check
+  for (int i = 0; i < 500; i++) {
+    for (int j = 0; j < 6; j++) {
+      Serial.print(model_input_buffer[i * 6 + j]);
+      Serial.print("\t");
+    }
+    Serial.println();
+  }
   
+  Serial.println();
+  Serial.println();
+
+  for (int i = 0; i < 500; i++) {
+    for (int j = 0; j < 6; j++) {
+      Serial.print(data[i][j]);
+      Serial.print("\t");
+    }
+    Serial.println();
+  }
+
   // Perform inference
   TfLiteStatus invoke_status = interpreter->Invoke();
   if (invoke_status != kTfLiteOk) {
@@ -195,11 +216,24 @@ void loop() {
     return;
   }
 
-  // Get the output tensor
-  TfLiteTensor* output = interpreter->output(0);
+  // Leggere i risultati dal tensore di output
+  float* output_data = model_output->data.f;
+  int output_size = model_output->dims->data[1];  // Dimensione dell'output
 
-  // Send the result through the serial port
-  for (int i = 0; i < output->dims->data[0]; i++) {
-    Serial.println(output->data.f[i], 6);
+  // Trovare la classe predetta
+  int predicted_class = 0;
+  float max_probability = output_data[0];
+  for (int i = 1; i < output_size; i++) {
+    Serial.print("valore: ");
+    Serial.println(output_data[i]);
+    if (output_data[i] > max_probability) {
+      max_probability = output_data[i];
+      predicted_class = i;
+    }
   }
+
+  // Stampa la classe predetta
+  Serial.print("Classe predetta: ");
+  Serial.println(predicted_class);
+
 }
