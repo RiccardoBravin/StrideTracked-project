@@ -16,3 +16,4 @@ Elia:	[diverse superfici]
 Mara: [due superfici, ciabatte, scalza unica stanza]
 Annick: [due superfici scalza, altre due superfici scarpe. nota: "scatola" era molto sensibile ai suoni/voci esterne, valutare se eliminarlo]
 Ludovica: [scalza,scarpe,tacchi + letto,scatola,sedia,tavola] 
+Valentina: [scarpe, ciabatte + scrivania, poltrona] (passi MOOOOLTO LEGGERI)

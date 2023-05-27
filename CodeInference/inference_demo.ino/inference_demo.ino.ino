@@ -1,10 +1,10 @@
 #include <Arduino_LSM9DS1.h>
 
 #include <TensorFlowLite.h>
-#include "stride_model.h"
+#include "third_model_aug9_lab.hpp"
 #include "tensorflow/lite/micro/all_ops_resolver.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
-#include "tensorflow/lite/micro/micro_log.h" //in quella di Harvard copiare micro_log.h e .cpp (si trova in TFLite libreria)
+//#include "tensorflow/lite/micro/micro_log.h" //in quella di Harvard copiare micro_log.h e .cpp (si trova in TFLite libreria)
 #include "tensorflow/lite/micro/micro_error_reporter.h"
 //#include "tensorflow/lite/micro/system_setup.h"
 #include "tensorflow/lite/schema/schema_generated.h"
@@ -22,16 +22,14 @@ namespace {
   //RecognizeCommands* recognizer = nullptr;
   int inference_count = 0; //serve?
 
-  //media and stdev of the training set
-  float media[] = {2.06853779e+02, 2.38505983e+02, 1.60015700e+04, 6.80661577e+01, 8.75363917e+01, -2.57372471e+01, 3.05424657e+00};
-  float stdev[] = {480.24286526, 366.15700767, 68.46725852, 28.72658113, 19.91091629, 16.62562744, 2.375685};
-
-  constexpr int kTensorArenaSize = 100*1024;
+  
+  constexpr int kTensorArenaSize = 130*1024;
   // Keep aligned to 16 bytes for CMSIS
   alignas(16) uint8_t tensor_arena[kTensorArenaSize];
   //int8_t feature_buffer[kFeatureElementCount]; //messo nelle slide
   float* model_input_buffer = nullptr;
 }  // namespace
+
 
 void setup() {
   // put your setup code here, to run once:
@@ -126,6 +124,7 @@ void loop() {
   float data[500][6];
   int sample_count = 0;
 
+  Serial.println("Inizio lettura dati...");
   // Accumula i campioni fino a raggiungere 500
   while (sample_count < 500) {
     if (IMU.accelAvailable() && IMU.gyroAvailable()) {
@@ -151,29 +150,35 @@ void loop() {
       sample_count++;
     }
   }
-
+  
+  Serial.println("Normalizzazione...");
   // Calcola media e deviazione standard
-  // float media[6] = {0.0};
-  // float stdev[6] = {0.0};
-  // for (int i = 0; i < 6; i++) {
-  //   for (int j = 0; j < 500; j++) {
-  //     media[i] += data[j][i];
-  //   }
-  //   media[i] /= 500.0;
-  // }
+  /*float media[6] = {0.0};
+  float stdev[6] = {0.0};
+  for (int i = 0; i < 6; i++) {
+    for (int j = 0; j < 500; j++) {
+      media[i] += data[j][i];
+    }
+    media[i] /= 500.0;
+  }
 
-  // for (int i = 0; i < 6; i++) {
-  //   for (int j = 0; j < 500; j++) {
-  //     stdev[i] += (data[j][i] - media[i]) * (data[j][i] - media[i]);
-  //   }
-  //   stdev[i] = sqrt(stdev[i] / 500.0);
-  // }
+  for (int i = 0; i < 6; i++) {
+    for (int j = 0; j < 500; j++) {
+      stdev[i] += (data[j][i] - media[i]) * (data[j][i] - media[i]);
+    }
+    stdev[i] = sqrt(stdev[i] / 500.0);
+  }
 
   // Normalizza i dati
-  // Definizione delle variabili media e deviazione standard del training set (vedi in setup())
   for (int i = 0; i < 500; i++) {
     for (int j = 0; j < 6; j++) {
-      data[i][j] = (data[i][j] - media[j]) / stdev[j];
+      data[i][j] = (data[i][j] - media[j]) / stdev[j];  
+    }
+  }*/
+
+  for (int i = 0; i < 500; i++) {
+    for (int j = 0; j < 6; j++) {
+      data[i][j] = data[i][j] / 32768;  
     }
   }
 
@@ -190,8 +195,7 @@ void loop() {
   //memcpy(model_input_buffer, data, sizeof(float) * 500 * 6); //QUESTO NON FUNZIONA
 
   //only to check
-  char[] toPrint;
-  for (int i = 0; i < 500; i++) {
+  /*for (int i = 0; i < 500; i++) {
     for (int j = 0; j < 6; j++) {
       Serial.print(model_input_buffer[i * 6 + j],6);
       Serial.print("\t");
@@ -208,14 +212,18 @@ void loop() {
       Serial.print("\t");
     }
     Serial.println();
-  }
+  }*/
 
+  Serial.println("Inizio inferenza...");
+  unsigned long startTime = millis();
+  
   // Perform inference
   TfLiteStatus invoke_status = interpreter->Invoke();
   if (invoke_status != kTfLiteOk) {
     TF_LITE_REPORT_ERROR(error_reporter, "Invoke failed");
     return;
   }
+
 
   // Leggere i risultati dal tensore di output
   float* output_data = model_output->data.f;
@@ -224,7 +232,7 @@ void loop() {
   // Trovare la classe predetta
   int predicted_class = 0;
   float max_probability = output_data[0];
-  for (int i = 1; i < output_size; i++) {
+  for (int i = 0; i < output_size; i++) {
     Serial.print("valore: ");
     Serial.println(output_data[i]);
     if (output_data[i] > max_probability) {
@@ -237,4 +245,6 @@ void loop() {
   Serial.print("Classe predetta: ");
   Serial.println(predicted_class);
 
+  Serial.print("Tempo di inferenza: ");
+  Serial.println(millis() - startTime);
 }
