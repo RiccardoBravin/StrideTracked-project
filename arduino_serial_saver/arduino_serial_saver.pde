@@ -113,10 +113,12 @@ void keyPressed() {
     exit();
   }
 
-  if (key >= '0' && key <= '9') {
-
-    label = int(key-'0');
-
+  if ((key >= '0' && key <= '9') || (key >= 'a' && key <= 'z')) {
+    
+    label = int(key-'a'+10);
+    if(label < 0) 
+      label = int(key-'0');
+      
     try {
       output.flush();
       output.close();
