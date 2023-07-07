@@ -21,7 +21,7 @@ limitations under the License.
 #include "constants.h"
 #include "main_functions.h"
 #include "model.h"  //contains model data
-#include "output_handler.h"
+#include "result visualizer.h"
 #include "tensorflow/lite/micro/all_ops_resolver.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/micro_log.h"
