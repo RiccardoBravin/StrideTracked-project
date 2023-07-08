@@ -18,6 +18,9 @@ limitations under the License.
 #include <arduinoFFT.h>
 #include <Arduino_KNN.h>
 
+#include <pt.h> //for multithreading
+
+
 #include "constants.h"
 #include "main_functions.h"
 #include "model.h"  //contains model data
@@ -33,6 +36,9 @@ limitations under the License.
 #define SAMPLING_FREQUENCY 238
 
 #define OUTPUT_CLASSES 128
+
+#define BUTTON_PIN = 2;    //the number of the pushbutton pin
+
 
 
 namespace {
@@ -50,6 +56,7 @@ alignas(16) uint8_t tensor_arena[kTensorArenaSize];
 
 double data[6][MAX_SAMPLES];
 double imagAux[6][MAX_SAMPLES];
+
 //variabili per gestire training mode
 bool trainMode = false;
 int exampleToAdd = 40; //numero sample da aggiungere alla knn
@@ -57,10 +64,9 @@ int counter; //per fare il ciclo della train mode
 int newLabel; //inserita da tastiera
 int autoLabel=1; //read da input dava risultati strani, questa label si incrementa di 1 ogni volta.
 
-arduinoFFT FFTs[6];
+arduinoFFT FFTs[6]; //array di oggetti FFTs
 
-// create KNN classifier, input will be array of 128 floats
-KNNClassifier myKNN(128);
+static struct pt pt1; //for multithreading (protothread structure)
 
 void setup() {
 
@@ -90,8 +96,9 @@ void setup() {
 
   //---------------------------------------------------------------- FFT setup  ----------------------------------------------------------------//
 
+  //inizializzo FFTs objects by passing all reference 
   for(int i = 0; i < 6; i++){
-    FFTs[i] = arduinoFFT(data[0], imagAux[0], MAX_SAMPLES, SAMPLING_FREQUENCY);
+    FFTs[i] = arduinoFFT(data[i], imagAux[i], MAX_SAMPLES, SAMPLING_FREQUENCY);
   }
 
   //---------------------------------------------------------------- CNN setup  ----------------------------------------------------------------//
@@ -126,6 +133,22 @@ void setup() {
 
   Serial.begin(9600); //inserito per prendere dati da input
   while (!Serial);
+
+  //---------------------------------------------------------------- KNN setup  ----------------------------------------------------------------//
+
+  // create KNN classifier, input will be array of 128 floats
+  KNNClassifier myKNN(128);
+
+  //---------------------------------------------------------------- Misc setup  ----------------------------------------------------------------//
+
+  // initialize the pushbutton pin as an input:
+  pinMode(BUTTON_PIN, INPUT);
+
+  // initialize the LED as an output:
+  pinMode(PW_LED_PIN, OUTPUT);
+
+  //inizializzo protothread
+  PT_INIT(&pt1);
 }
 
 
@@ -195,7 +218,34 @@ void loop() {
   // Obtain the output from model's output tensor
   float *y = output->data.f;
 
-  if(!trainMode){ //CLASSIFY MODE
+  //if button is pressed, enter train mode
+  if(digitalRead(BUTTON_PIN) == HIGH){
+    trainMode = true; //set train mode flag
+
+    protothreadBlinkLED(&pt1, &trainMode);  //start train mode led blink routine
+
+    counter = exampleToAdd;     //reset counter
+
+    MicroPrintf("Welcome in the TRAIN MODE: Auto label is: %d",autoLabel);
+    delay(3000);
+  }
+  
+
+  if(trainMode){ //TRAIN MODE
+    myKNN.addExample(y, autoLabel); //add example to KNN classifier
+
+    MicroPrintf("Remaining examples to be added...: %d",counter);
+    counter--;
+    
+    if(counter==0){ //if all examples have been added, exit train mode
+      trainMode = false;
+      autoLabel++; //increment auto label for next training session
+      MicroPrintf("Returning to INFERENCE MODE");
+      delay(3000);
+    }
+    
+
+  }else{ //CLASSIFY MODE
     int personLabel = myKNN.classify(y, 11); //k=5. provo con k=sqrt(120)
 
     if(personLabel > 0){ //nota: registrare label>0
@@ -205,24 +255,13 @@ void loop() {
       MicroPrintf("Unknown person, Did you train me?\n");
     }
 
-    if(Serial.available()>0){
-      newLabel = readNumber(); //ora non serve piu, uso label che si incrementa
+    /*if(Serial.available()>0){
+      //newLabel = readNumber(); //ora non serve piu, uso label che si incrementa
       trainMode=true;
       counter = exampleToAdd;
       MicroPrintf("Welcome in the TRAIN MODE: Auto label is: %d",autoLabel);
       delay(3000);
-    }
-
-  }else{ //trainMode=true
-    myKNN.addExample(y, autoLabel);
-    MicroPrintf("Remaining examples to be added...: %d",counter);
-    counter--;
-    if(counter==0){
-      trainMode=false;
-      autoLabel++;
-      MicroPrintf("Returning to INFERENCE MODE");
-      delay(3000);
-    }
+    }*/
   }
   
   //just checking the shape of y
@@ -243,7 +282,7 @@ void loop() {
 
 }
 
-
+/*
 // reads a number from the Serial Monitor
 // expects new line
 int readNumber() {
@@ -264,3 +303,4 @@ int readNumber() {
     }
   }
 }
+*/

@@ -69,4 +69,18 @@ void class_to_led(int class_label, bool log_silence = false){
   }
 }
 
-
+static int protothreadBlinkLED(struct pt *pt, bool &training)
+{
+  static unsigned long lastTimeBlink = 0;
+  static const int PW_LED_PIN = 25;   //the number of the LED pin
+  PT_BEGIN(pt);
+  while(training) {
+    lastTimeBlink = millis();
+    PT_WAIT_UNTIL(pt, millis() - lastTimeBlink > 250);
+    digitalWrite(PW_LED_PIN, HIGH);
+    lastTimeBlink = millis();
+    PT_WAIT_UNTIL(pt, millis() - lastTimeBlink > 250);
+    digitalWrite(PW_LED_PIN, LOW);
+  }
+  PT_END(pt);
+}
