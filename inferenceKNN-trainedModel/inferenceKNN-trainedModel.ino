@@ -24,7 +24,7 @@ limitations under the License.
 #include "constants.h"
 #include "main_functions.h"
 #include "model.h"  //contains model data
-#include "result visualizer.h"
+#include "result_visualizer.h"
 #include "tensorflow/lite/micro/all_ops_resolver.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/micro_log.h"
@@ -37,7 +37,8 @@ limitations under the License.
 
 #define OUTPUT_CLASSES 128
 
-#define BUTTON_PIN = 2;    //the number of the pushbutton pin
+#define BUTTON_PIN 2   //the number of the pushbutton pin
+
 
 
 
@@ -65,6 +66,10 @@ int newLabel; //inserita da tastiera
 int autoLabel=1; //read da input dava risultati strani, questa label si incrementa di 1 ogni volta.
 
 arduinoFFT FFTs[6]; //array di oggetti FFTs
+  
+//---------------------------------------------------------------- KNN setup  ----------------------------------------------------------------//
+// create KNN classifier, input will be array of 128 floats
+KNNClassifier myKNN(128);
 
 static struct pt pt1; //for multithreading (protothread structure)
 
@@ -134,18 +139,11 @@ void setup() {
   Serial.begin(9600); //inserito per prendere dati da input
   while (!Serial);
 
-  //---------------------------------------------------------------- KNN setup  ----------------------------------------------------------------//
-
-  // create KNN classifier, input will be array of 128 floats
-  KNNClassifier myKNN(128);
 
   //---------------------------------------------------------------- Misc setup  ----------------------------------------------------------------//
 
-  // initialize the pushbutton pin as an input:
-  pinMode(BUTTON_PIN, INPUT);
-
   // initialize the LED as an output:
-  pinMode(PW_LED_PIN, OUTPUT);
+  //pinMode(PW_LED_PIN, OUTPUT);
 
   //inizializzo protothread
   PT_INIT(&pt1);
@@ -218,11 +216,14 @@ void loop() {
   // Obtain the output from model's output tensor
   float *y = output->data.f;
 
+  char inputStr[100]; 
+  Serial.readBytesUntil('\n', inputStr, 99);
+
   //if button is pressed, enter train mode
-  if(digitalRead(BUTTON_PIN) == HIGH){
+  if(inputStr[0] == 1){
     trainMode = true; //set train mode flag
 
-    protothreadBlinkLED(&pt1, &trainMode);  //start train mode led blink routine
+    //protothreadBlinkLED(&pt1, trainMode);  //start train mode led blink routine
 
     counter = exampleToAdd;     //reset counter
 
@@ -250,6 +251,7 @@ void loop() {
 
     if(personLabel > 0){ //nota: registrare label>0
       MicroPrintf("Classe Predetta: %d", personLabel);
+      class_to_led(personLabel, true);
     }
     else{
       MicroPrintf("Unknown person, Did you train me?\n");

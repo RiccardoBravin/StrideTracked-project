@@ -6,13 +6,14 @@
 
 
 #include <algorithm>
+#include <pt.h>
 
 #include "Arduino.h"
 #include "constants.h"
-#include "output_handler.h"
+#include "result_visualizer.h"
 
 
-void class_to_led(int class_label, bool log_silence = false){
+void class_to_led(int class_label, bool log_silence){
 
   // The pin of the Arduino's built-in LED
   static const int led_r = 22;
@@ -73,6 +74,17 @@ static int protothreadBlinkLED(struct pt *pt, bool &training)
 {
   static unsigned long lastTimeBlink = 0;
   static const int PW_LED_PIN = 25;   //the number of the LED pin
+
+  // Track whether the function has run at least once
+  static bool initialized = false;
+
+  // Do this only once
+  if (!initialized) {
+    pinMode(PW_LED_PIN, OUTPUT);
+    digitalWrite(PW_LED_PIN, LOW);
+    initialized = true;
+  }
+
   PT_BEGIN(pt);
   while(training) {
     lastTimeBlink = millis();
