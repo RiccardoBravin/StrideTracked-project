@@ -39,60 +39,33 @@ void class_to_led(int class_label, bool log_silence){
 
   //could probably be changed to analogWrite if we want to use PWM and give values from 0 to 255
 
-  if(class_label == 1){
-    digitalWrite(led_r, HIGH);
+  if(class_label == 2){
     digitalWrite(led_r, LOW);
-    digitalWrite(led_r, LOW);
-  }else if(class_label == 2){
-    digitalWrite(led_r, LOW);
-    digitalWrite(led_r, HIGH);
-    digitalWrite(led_r, LOW);
+    digitalWrite(led_g, HIGH);
+    digitalWrite(led_b, HIGH);
   }else if(class_label == 3){
-    digitalWrite(led_r, LOW);
-    digitalWrite(led_r, LOW);
     digitalWrite(led_r, HIGH);
+    digitalWrite(led_g, LOW);
+    digitalWrite(led_b, HIGH);
   }else if(class_label == 4){
     digitalWrite(led_r, HIGH);
-    digitalWrite(led_r, HIGH);
-    digitalWrite(led_r, LOW);
+    digitalWrite(led_g, HIGH);
+    digitalWrite(led_b, LOW);
   }else if(class_label == 5){
-    digitalWrite(led_r, HIGH);
     digitalWrite(led_r, LOW);
-    digitalWrite(led_r, HIGH);
+    digitalWrite(led_g, LOW);
+    digitalWrite(led_b, HIGH);
   }else if(class_label == 6){
     digitalWrite(led_r, LOW);
+    digitalWrite(led_g, HIGH);
+    digitalWrite(led_b, LOW);
+  }else if(class_label == 7){
     digitalWrite(led_r, HIGH);
-    digitalWrite(led_r, HIGH);
-  }else if(class_label == 0 && log_silence){
-    digitalWrite(led_r, HIGH);
-    digitalWrite(led_r, HIGH);
-    digitalWrite(led_r, HIGH);
+    digitalWrite(led_g, LOW);
+    digitalWrite(led_b, LOW);
+  }else if(class_label == 1 && log_silence){
+    digitalWrite(led_r, LOW);
+    digitalWrite(led_g, LOW);
+    digitalWrite(led_b, LOW);
   }
-}
-
-static int protothreadBlinkLED(struct pt *pt, bool &training)
-{
-  static unsigned long lastTimeBlink = 0;
-  static const int PW_LED_PIN = 25;   //the number of the LED pin
-
-  // Track whether the function has run at least once
-  static bool initialized = false;
-
-  // Do this only once
-  if (!initialized) {
-    pinMode(PW_LED_PIN, OUTPUT);
-    digitalWrite(PW_LED_PIN, LOW);
-    initialized = true;
-  }
-
-  PT_BEGIN(pt);
-  while(training) {
-    lastTimeBlink = millis();
-    PT_WAIT_UNTIL(pt, millis() - lastTimeBlink > 250);
-    digitalWrite(PW_LED_PIN, HIGH);
-    lastTimeBlink = millis();
-    PT_WAIT_UNTIL(pt, millis() - lastTimeBlink > 250);
-    digitalWrite(PW_LED_PIN, LOW);
-  }
-  PT_END(pt);
 }

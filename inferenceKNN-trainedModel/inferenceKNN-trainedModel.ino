@@ -18,7 +18,7 @@ limitations under the License.
 #include <arduinoFFT.h>
 #include <Arduino_KNN.h>
 
-#include <pt.h> //for multithreading
+//#include <pt.h> //for multithreading
 
 
 #include "constants.h"
@@ -37,8 +37,8 @@ limitations under the License.
 
 #define OUTPUT_CLASSES 128
 
-#define BUTTON_PIN 2   //the number of the pushbutton pin
-
+#define BUTTON_PIN 13   //the number of the pushbutton pin
+#define LED_PIN 13
 
 
 
@@ -60,10 +60,10 @@ double imagAux[6][MAX_SAMPLES];
 
 //variabili per gestire training mode
 bool trainMode = false;
-int exampleToAdd = 40; //numero sample da aggiungere alla knn
+int exampleToAdd = 4; //numero sample da aggiungere alla knn
 int counter; //per fare il ciclo della train mode
 int newLabel; //inserita da tastiera
-int autoLabel=1; //read da input dava risultati strani, questa label si incrementa di 1 ogni volta.
+int label=0; //read da input dava risultati strani, questa label si incrementa di 1 ogni volta.
 
 arduinoFFT FFTs[6]; //array di oggetti FFTs
   
@@ -71,7 +71,6 @@ arduinoFFT FFTs[6]; //array di oggetti FFTs
 // create KNN classifier, input will be array of 128 floats
 KNNClassifier myKNN(128);
 
-static struct pt pt1; //for multithreading (protothread structure)
 
 void setup() {
 
@@ -143,10 +142,8 @@ void setup() {
   //---------------------------------------------------------------- Misc setup  ----------------------------------------------------------------//
 
   // initialize the LED as an output:
-  //pinMode(PW_LED_PIN, OUTPUT);
+  pinMode(LED_PIN, OUTPUT);
 
-  //inizializzo protothread
-  PT_INIT(&pt1);
 }
 
 
@@ -186,8 +183,8 @@ void loop() {
     FFTs[i].Compute(FFT_FORWARD);
     FFTs[i].ComplexToMagnitude();
   }
-
-  MicroPrintf("Time for FFT %ul", millis()-startTimeFFT);
+ 
+  MicroPrintf("Time for FFT %u", millis()-startTimeFFT);
 
 
   MicroPrintf("Starting inference of NN...");
@@ -210,51 +207,51 @@ void loop() {
     return;
   }
 
-  MicroPrintf("Time for inference: %ul\n", millis()-startTimeInference);
+  MicroPrintf("Time for inference: %u\n", millis()-startTimeInference);
 
 
   // Obtain the output from model's output tensor
   float *y = output->data.f;
 
-  char inputStr[100]; 
+  char inputStr[100] = ""; 
   Serial.readBytesUntil('\n', inputStr, 99);
 
   //if button is pressed, enter train mode
-  if(inputStr[0] == 1){
+  if(inputStr[0] != 0){
     trainMode = true; //set train mode flag
-
-    //protothreadBlinkLED(&pt1, trainMode);  //start train mode led blink routine
+    label = inputStr[0] - '1' + 1;
+    digitalWrite(LED_PIN, HIGH);
 
     counter = exampleToAdd;     //reset counter
 
-    MicroPrintf("Welcome in the TRAIN MODE: Auto label is: %d",autoLabel);
-    delay(3000);
+    MicroPrintf("Welcome in the TRAIN MODE: Auto label is: %d", label);
+    //delay(3000);
   }
   
 
   if(trainMode){ //TRAIN MODE
-    myKNN.addExample(y, autoLabel); //add example to KNN classifier
+    myKNN.addExample(y, label); //add example to KNN classifier
 
     MicroPrintf("Remaining examples to be added...: %d",counter);
     counter--;
     
     if(counter==0){ //if all examples have been added, exit train mode
       trainMode = false;
-      autoLabel++; //increment auto label for next training session
+      //autoLabel++; //increment auto label for next training session
       MicroPrintf("Returning to INFERENCE MODE");
-      delay(3000);
+      //delay(3000);
     }
     
 
   }else{ //CLASSIFY MODE
-    int personLabel = myKNN.classify(y, 11); //k=5. provo con k=sqrt(120)
+    int personLabel = myKNN.classify(y, 3); //k=5. provo con k=sqrt(120)
 
     if(personLabel > 0){ //nota: registrare label>0
       MicroPrintf("Classe Predetta: %d", personLabel);
       class_to_led(personLabel, true);
     }
     else{
-      MicroPrintf("Unknown person, Did you train me?\n");
+      MicroPrintf("Unknown person, did you train me?\n");
     }
 
     /*if(Serial.available()>0){
