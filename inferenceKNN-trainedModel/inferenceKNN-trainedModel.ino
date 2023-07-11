@@ -60,10 +60,9 @@ double imagAux[6][MAX_SAMPLES];
 
 //variabili per gestire training mode
 bool trainMode = false;
-int exampleToAdd = 4; //numero sample da aggiungere alla knn
+int exampleToAdd = 5; //numero sample da aggiungere alla knn
 int counter; //per fare il ciclo della train mode
 int newLabel; //inserita da tastiera
-int label=0; //read da input dava risultati strani, questa label si incrementa di 1 ogni volta.
 
 arduinoFFT FFTs[6]; //array di oggetti FFTs
   
@@ -98,12 +97,7 @@ void setup() {
   IMU.accelUnit = GRAVITY;         // GRAVITY=1 or  METERPERSECOND2=9.81
   IMU.gyroUnit = DEGREEPERSECOND;  //   DEGREEPERSECOND  RADIANSPERSECOND  REVSPERMINUTE  REVSPERSECOND
 
-  //---------------------------------------------------------------- FFT setup  ----------------------------------------------------------------//
-
-  //inizializzo FFTs objects by passing all reference 
-  for(int i = 0; i < 6; i++){
-    FFTs[i] = arduinoFFT(data[i], imagAux[i], MAX_SAMPLES, SAMPLING_FREQUENCY);
-  }
+  
 
   //---------------------------------------------------------------- CNN setup  ----------------------------------------------------------------//
   tflite::InitializeTarget();
@@ -138,15 +132,19 @@ void setup() {
   Serial.begin(9600); //inserito per prendere dati da input
   while (!Serial);
 
+  //---------------------------------------------------------------- FFT setup  ----------------------------------------------------------------//
 
+  //inizializzo FFTs objects by passing all reference 
+  for(int i = 0; i < 6; i++){
+    FFTs[i] = arduinoFFT(data[i], imagAux[i], MAX_SAMPLES, SAMPLING_FREQUENCY);
+  }
+  
   //---------------------------------------------------------------- Misc setup  ----------------------------------------------------------------//
 
   // initialize the LED as an output:
   pinMode(LED_PIN, OUTPUT);
 
 }
-
-
 
 
 void loop() {
@@ -165,25 +163,56 @@ void loop() {
       IMU.readRawGyroArr(gyro);
 
       //Converti i valori letti nell'intervallo desiderato per il modello
-      data[0][sample_count] = static_cast<double>(acc[0]) / 16384; //accx
-      data[1][sample_count] = static_cast<double>(acc[1]) / 16384; //accy
-      data[2][sample_count] = static_cast<double>(acc[2]) / 16384; //accz
-      data[3][sample_count] = static_cast<double>(gyro[0]) / 16384; //gyrox
-      data[4][sample_count] = static_cast<double>(gyro[1]) / 16384; //gyroy
-      data[5][sample_count] = static_cast<double>(gyro[2]) / 16384; //gyroz
+      data[0][sample_count] = (double)(acc[0]) / 16384; //accx
+      data[1][sample_count] = (double)(acc[1]) / 16384; //accy
+      data[2][sample_count] = (double)(acc[2]) / 16384; //accz
+      data[3][sample_count] = (double)(gyro[0]) / 16384; //gyrox
+      data[4][sample_count] = (double)(gyro[1]) / 16384; //gyroy
+      data[5][sample_count] = (double)(gyro[2]) / 16384; //gyroz
 
+      imagAux[0][sample_count] = 0;
+      imagAux[1][sample_count] = 0;
+      imagAux[2][sample_count] = 0;
+      imagAux[3][sample_count] = 0;
+      imagAux[4][sample_count] = 0;
+      imagAux[5][sample_count] = 0;
+      
       sample_count++;
+
+      //DEBUG
+      //Serial.print((double)(acc[2]) / 16384);
+      //Serial.print(", ");
     }
   }
 
+  //DEBUG
+  /*Serial.println("");
+
+  for (int j = 0; j < (MAX_SAMPLES >> 1); j++) {
+      Serial.print(data[2][j]);
+      Serial.print(", ");
+  }
+
+  Serial.println("");*/
+
   MicroPrintf("Performing FFT...\n");
   unsigned long startTimeFFT = millis();
+
+  
   //Intrinsically the FFT object performs the transform on the data matrix
   for(int i = 0; i < 6; i++){
     FFTs[i].Compute(FFT_FORWARD);
     FFTs[i].ComplexToMagnitude();
   }
- 
+
+  //DEBUG
+  /*for (int j = 0; j < (MAX_SAMPLES >> 1); j++) {
+      Serial.print(static_cast<float>(data[0][j]));
+      Serial.print(", ");
+  }
+
+  Serial.println("");*/
+  
   MicroPrintf("Time for FFT %u", millis()-startTimeFFT);
 
 
@@ -213,24 +242,32 @@ void loop() {
   // Obtain the output from model's output tensor
   float *y = output->data.f;
 
+  //DEBUG
+  /*for(int i = 0; i < 128; i++){
+    Serial.print(y[i]);
+    Serial.print(", ");
+  }*/
+
+  Serial.println("");
+
   char inputStr[100] = ""; 
   Serial.readBytesUntil('\n', inputStr, 99);
 
   //if button is pressed, enter train mode
   if(inputStr[0] != 0){
     trainMode = true; //set train mode flag
-    label = inputStr[0] - '1' + 1;
+    newLabel = inputStr[0] - '1' + 1;
     digitalWrite(LED_PIN, HIGH);
 
     counter = exampleToAdd;     //reset counter
 
-    MicroPrintf("Welcome in the TRAIN MODE: Auto label is: %d", label);
+    MicroPrintf("Welcome in the TRAIN MODE: Chosen label is: %d", newLabel);
     //delay(3000);
   }
   
 
   if(trainMode){ //TRAIN MODE
-    myKNN.addExample(y, label); //add example to KNN classifier
+    myKNN.addExample(y, newLabel); //add example to KNN classifier
 
     MicroPrintf("Remaining examples to be added...: %d",counter);
     counter--;
@@ -244,16 +281,17 @@ void loop() {
     
 
   }else{ //CLASSIFY MODE
-    int personLabel = myKNN.classify(y, 3); //k=5. provo con k=sqrt(120)
+    int personLabel = myKNN.classify(y, 10); //k=5. provo con k=sqrt(120)
 
     if(personLabel > 0){ //nota: registrare label>0
-      MicroPrintf("Classe Predetta: %d", personLabel);
+      MicroPrintf("Predicted class: %d\nConfidence: %f", personLabel, myKNN.confidence());
       class_to_led(personLabel, true);
     }
     else{
       MicroPrintf("Unknown person, did you train me?\n");
     }
-
+    
+    //OLD
     /*if(Serial.available()>0){
       //newLabel = readNumber(); //ora non serve piu, uso label che si incrementa
       trainMode=true;
@@ -263,6 +301,7 @@ void loop() {
     }*/
   }
   
+  //OLD
   //just checking the shape of y
   // MicroPrintf("Output probabilities:");
   // for(int i = 0; i < OUTPUT_CLASSES; i++){
