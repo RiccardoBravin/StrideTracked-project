@@ -9,7 +9,6 @@
 #include <pt.h>
 
 #include "Arduino.h"
-#include "constants.h"
 #include "result_visualizer.h"
 
 

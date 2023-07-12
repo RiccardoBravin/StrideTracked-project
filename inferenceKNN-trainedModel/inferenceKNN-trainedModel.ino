@@ -1,28 +1,15 @@
-/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+/* ==============================================================================
+ *  Program created by Riccardo Bravin and Francesco Caserta
 ==============================================================================*/
+
+//#define DEBUG 1
 
 #include <TensorFlowLite.h>
 #include <Arduino_LSM9DS1.h> //for IMU
 #include <arduinoFFT.h>
 #include <Arduino_KNN.h>
 
-//#include <pt.h> //for multithreading
 
-
-#include "constants.h"
-#include "main_functions.h"
 #include "model.h"  //contains model data
 #include "result_visualizer.h"
 #include "tensorflow/lite/micro/all_ops_resolver.h"
@@ -41,28 +28,28 @@ limitations under the License.
 #define LED_PIN 13
 
 
-
+//model variables
 namespace {
 const tflite::Model* model = nullptr;
 tflite::MicroInterpreter* interpreter = nullptr;
 TfLiteTensor* input = nullptr;
 TfLiteTensor* output = nullptr;
 
-constexpr int kTensorArenaSize = 82*1024;  //con quessto funziona:  135*1024.    65:non funziona  |  90:funziona  | 82 funziona->76520bytes liberi->120examples per la Knn | 
+constexpr int kTensorArenaSize = 82*1024; 
+
 // Keep aligned to 16 bytes for CMSIS
 alignas(16) uint8_t tensor_arena[kTensorArenaSize];
-
 }  // namespace
 
-
+//arrays for data and FFT
 double data[6][MAX_SAMPLES];
 double imagAux[6][MAX_SAMPLES];
 
-//variabili per gestire training mode
+//training mode handling variables
 bool trainMode = false;
-int exampleToAdd = 5; //numero sample da aggiungere alla knn
-int counter; //per fare il ciclo della train mode
-int newLabel; //inserita da tastiera
+int exampleToAdd = 5; //number of samples to record ad each recording session
+int counter; //counter of remaining samples to record
+int newLabel; //label inserted by user
 
 arduinoFFT FFTs[6]; //array di oggetti FFTs
   
@@ -87,18 +74,16 @@ void setup() {
   IMU.setGyroFS(0);
   IMU.setGyroODR(4);
 
-  /*******************    For an improved accuracy run the DIY_Calibration_Accelerometer sketch first.     ****************
-  ********************         Copy/Replace the lines below by the code output of the program              ****************/
-  IMU.setAccelOffset(0, 0, 0);  //   uncalibrated
-  IMU.setAccelSlope(1, 1, 1);   //   uncalibrated
-  IMU.setGyroOffset(0, 0, 0);   // = uncalibrated
-  IMU.setGyroSlope(1, 1, 1);    // = uncalibrated
+  /*******************    For an improved accuracy run the DIY_Calibration_Accelerometer sketch first.     *****************/
+  IMU.setAccelOffset(0, 0, 0);  //uncalibrated
+  IMU.setAccelSlope(1, 1, 1);   //uncalibrated
+  IMU.setGyroOffset(0, 0, 0);   //uncalibrated
+  IMU.setGyroSlope(1, 1, 1);    //uncalibrated
 
   IMU.accelUnit = GRAVITY;         // GRAVITY=1 or  METERPERSECOND2=9.81
-  IMU.gyroUnit = DEGREEPERSECOND;  //   DEGREEPERSECOND  RADIANSPERSECOND  REVSPERMINUTE  REVSPERSECOND
+  IMU.gyroUnit = DEGREEPERSECOND;  // DEGREEPERSECOND  RADIANSPERSECOND  REVSPERMINUTE  REVSPERSECOND
 
   
-
   //---------------------------------------------------------------- CNN setup  ----------------------------------------------------------------//
   tflite::InitializeTarget();
 
@@ -111,8 +96,7 @@ void setup() {
   }
 
   // This pulls in all the operation implementations we need.
-  // NOLINTNEXTLINE(runtime-global-variables)
-  static tflite::AllOpsResolver resolver;
+  static tflite::AllOpsResolver resolver;             ///////<<<<<<<<<<<<<<<<<<<-------------------------------------------------------------SET ONLY REQUIRED OPS!!!
 
   // Build an interpreter to run the model with.
   static tflite::MicroInterpreter static_interpreter(model, resolver, tensor_arena, kTensorArenaSize);
@@ -130,6 +114,7 @@ void setup() {
   output = interpreter->output(0);
 
   Serial.begin(9600); //inserito per prendere dati da input
+  Serial.setTimeout(5);
   while (!Serial);
 
   //---------------------------------------------------------------- FFT setup  ----------------------------------------------------------------//
@@ -148,11 +133,29 @@ void setup() {
 
 
 void loop() {
+  
+  char inputStr[16] = ""; 
+  Serial.readBytesUntil('\n', inputStr, 15);
 
+  //if command passed, enter train mode
+  if(inputStr[0] != 0){
+    trainMode = true; //set train mode flag
+    newLabel = inputStr[0] - '1' + 1;
+
+    counter = exampleToAdd;//reset counter
+
+    MicroPrintf("--------------------\n STARTED TRAIN MODE\n--------------------");
+  }
+  
+  MicroPrintf("-----------Acquiring data-----------");
+  unsigned long startTimeAcquisition = millis();
+
+  
+
+  
   //define variables for IMU reads
   int16_t acc[3], gyro[3];
 
-  MicroPrintf("Reading world data...\n");
   // Read samples until it gets to the Nsamples value
   int sample_count = 0;
   while (sample_count < MAX_SAMPLES) {
@@ -170,32 +173,40 @@ void loop() {
       data[4][sample_count] = (double)(gyro[1]) / 16384; //gyroy
       data[5][sample_count] = (double)(gyro[2]) / 16384; //gyroz
 
-      imagAux[0][sample_count] = 0;
-      imagAux[1][sample_count] = 0;
-      imagAux[2][sample_count] = 0;
-      imagAux[3][sample_count] = 0;
-      imagAux[4][sample_count] = 0;
-      imagAux[5][sample_count] = 0;
+      //resetting imaginary component for FFT
+      imagAux[0][sample_count] = 0; imagAux[1][sample_count] = 0; imagAux[2][sample_count] = 0; imagAux[3][sample_count] = 0; imagAux[4][sample_count] = 0; imagAux[5][sample_count] = 0;
       
-      sample_count++;
+      if(sample_count % 64 < 32)
+        digitalWrite(LED_PIN, HIGH);
+      else{
+        digitalWrite(LED_PIN, LOW);
+      }
+      
+      #ifdef DEBUG
+        Serial.print((double)(acc[2]) / 16384); //prints z axis 
+        Serial.print(", ");
+      #endif
 
-      //DEBUG
-      //Serial.print((double)(acc[2]) / 16384);
-      //Serial.print(", ");
+      sample_count++;
     }
   }
 
-  //DEBUG
-  /*Serial.println("");
+  
+  
+  #ifdef DEBUG
+    Serial.println("");
 
-  for (int j = 0; j < (MAX_SAMPLES >> 1); j++) {
-      Serial.print(data[2][j]);
-      Serial.print(", ");
-  }
+    for (int j = 0; j < (MAX_SAMPLES >> 1); j++) {
+        Serial.print(data[2][j]);
+        Serial.print(", ");
+    }
 
-  Serial.println("");*/
-
-  MicroPrintf("Performing FFT...\n");
+    Serial.println("");*/
+  #endif
+  
+  MicroPrintf("Duration: %u\n", millis()-startTimeAcquisition);
+  
+  MicroPrintf("-----------Performing FFT-----------");
   unsigned long startTimeFFT = millis();
 
   
@@ -205,18 +216,19 @@ void loop() {
     FFTs[i].ComplexToMagnitude();
   }
 
-  //DEBUG
-  /*for (int j = 0; j < (MAX_SAMPLES >> 1); j++) {
+  #ifdef DEBUG
+    for (int j = 0; j < (MAX_SAMPLES >> 1); j++) {
       Serial.print(static_cast<float>(data[0][j]));
       Serial.print(", ");
-  }
+    }
 
-  Serial.println("");*/
+    Serial.println("");*/
+  #endif
   
-  MicroPrintf("Time for FFT %u", millis()-startTimeFFT);
+  MicroPrintf("Duration: %u", millis()-startTimeFFT);
 
 
-  MicroPrintf("Starting inference of NN...");
+  MicroPrintf("-----------CNN inference-----------");
   unsigned long startTimeInference = millis();
 
   int input_index = 0;
@@ -232,113 +244,60 @@ void loop() {
   // Run inference, and report any error
   TfLiteStatus invoke_status = interpreter->Invoke();
   if (invoke_status != kTfLiteOk) {
-    MicroPrintf("Invoke failed on data array\n");
+    MicroPrintf("Invoke failed on data array");
     return;
   }
 
-  MicroPrintf("Time for inference: %u\n", millis()-startTimeInference);
+  MicroPrintf("Duration: %u\n", millis()-startTimeInference);
 
 
+  MicroPrintf("-----------KNN inference/training-----------");
+  unsigned long startTimeKNN = millis();
+  
   // Obtain the output from model's output tensor
   float *y = output->data.f;
 
-  //DEBUG
-  /*for(int i = 0; i < 128; i++){
+  #ifdef DEBUG
+  for(int i = 0; i < 128; i++){
     Serial.print(y[i]);
     Serial.print(", ");
-  }*/
-
-  Serial.println("");
-
-  char inputStr[100] = ""; 
-  Serial.readBytesUntil('\n', inputStr, 99);
-
-  //if button is pressed, enter train mode
-  if(inputStr[0] != 0){
-    trainMode = true; //set train mode flag
-    newLabel = inputStr[0] - '1' + 1;
-    digitalWrite(LED_PIN, HIGH);
-
-    counter = exampleToAdd;     //reset counter
-
-    MicroPrintf("Welcome in the TRAIN MODE: Chosen label is: %d", newLabel);
-    //delay(3000);
   }
+  Serial.println("");
+  #endif
+  
+  
   
 
   if(trainMode){ //TRAIN MODE
     myKNN.addExample(y, newLabel); //add example to KNN classifier
 
-    MicroPrintf("Remaining examples to be added...: %d",counter);
+    MicroPrintf("Added %d/%d samples for class %d", exampleToAdd - counter + 1, exampleToAdd, newLabel);
     counter--;
     
     if(counter==0){ //if all examples have been added, exit train mode
       trainMode = false;
-      //autoLabel++; //increment auto label for next training session
       MicroPrintf("Returning to INFERENCE MODE");
-      //delay(3000);
     }
     
 
   }else{ //CLASSIFY MODE
     int personLabel = myKNN.classify(y, 10); //k=5. provo con k=sqrt(120)
 
-    if(personLabel > 0){ //nota: registrare label>0
-      MicroPrintf("Predicted class: %d\nConfidence: %f", personLabel, myKNN.confidence());
+    if(personLabel > 0){ //note: labels must be >0
+      Serial.print("Predicted class ");
+      Serial.print(personLabel);
+      Serial.print(" with ");
+      Serial.print(myKNN.confidence());
+      Serial.println(" confidence");
+      //MicroPrintf("Predicted class %d with %f confidence", personLabel, myKNN.confidence());
       class_to_led(personLabel, true);
     }
     else{
-      MicroPrintf("Unknown person, did you train me?\n");
+      MicroPrintf("Not enough samples for inference");
     }
     
-    //OLD
-    /*if(Serial.available()>0){
-      //newLabel = readNumber(); //ora non serve piu, uso label che si incrementa
-      trainMode=true;
-      counter = exampleToAdd;
-      MicroPrintf("Welcome in the TRAIN MODE: Auto label is: %d",autoLabel);
-      delay(3000);
-    }*/
   }
+
+  MicroPrintf("Duration: %u\n", millis()-startTimeKNN);
   
-  //OLD
-  //just checking the shape of y
-  // MicroPrintf("Output probabilities:");
-  // for(int i = 0; i < OUTPUT_CLASSES; i++){
-  //   MicroPrintf("%d", i);
-  //   MicroPrintf("%f", y[i]);
-  // }
-
-  //int class_index = 0;
-  // for(int i = 1; i < OUTPUT_CLASSES; i++){
-  //   if(y[i] > y[class_index]){
-  //     class_index = i;
-  //   }
-  // }
-
-  //MicroPrintf("La classe predetta è %d con probabilità %f", class_index, y[class_index]);
-
 }
-
-/*
-// reads a number from the Serial Monitor
-// expects new line
-int readNumber() {
-  String line;
-
-  while (1) {
-    if (Serial.available()) {
-      char c = Serial.read();
-
-      if (c == '\r') {
-        // ignore
-        continue;
-      } else if (c == '\n') {
-        break;
-      }
-
-      line += c;
-    }
-  }
-}
-*/
