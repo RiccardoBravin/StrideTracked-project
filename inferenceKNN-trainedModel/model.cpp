@@ -12,14 +12,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-// Automatically created from a TensorFlow Lite flatbuffer using the command:
+// Automatically created from TensorFlow Lite using the command:
 // xxd -i model.tflite > model.cc
 
 // This is a standard TensorFlow Lite model file that has been converted into a
 // C data array, so it can be easily compiled into a binary for devices that
 // don't have a file system.
-
-// See train/README.md for a full description of the creation process.
 
 #include "model.h"
 

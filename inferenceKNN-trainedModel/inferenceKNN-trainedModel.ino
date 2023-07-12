@@ -8,6 +8,7 @@
 #include <Arduino_LSM9DS1.h> //for IMU
 #include <arduinoFFT.h>
 #include <Arduino_KNN.h>
+//#include <ArduinoLowPower.h>
 
 
 #include "model.h"  //contains model data
@@ -24,9 +25,8 @@
 
 #define OUTPUT_CLASSES 128
 
-#define BUTTON_PIN 13   //the number of the pushbutton pin
 #define LED_PIN 13
-
+#define PW_LED_PIN 25
 
 //model variables
 namespace {
@@ -37,13 +37,15 @@ TfLiteTensor* output = nullptr;
 
 constexpr int kTensorArenaSize = 82*1024; 
 
-// Keep aligned to 16 bytes for CMSIS
-alignas(16) uint8_t tensor_arena[kTensorArenaSize];
+alignas(16) uint8_t tensor_arena[kTensorArenaSize]; // Keep aligned to 16 bytes for CMSIS
 }  // namespace
+
 
 //arrays for data and FFT
 double data[6][MAX_SAMPLES];
 double imagAux[6][MAX_SAMPLES];
+arduinoFFT FFTs[6]; //array of FFT objects
+
 
 //training mode handling variables
 bool trainMode = false;
@@ -51,7 +53,12 @@ int exampleToAdd = 5; //number of samples to record ad each recording session
 int counter; //counter of remaining samples to record
 int newLabel; //label inserted by user
 
-arduinoFFT FFTs[6]; //array di oggetti FFTs
+
+//sleep handling variables
+double power = 0;
+float thresholdPower = 0.3; //threshold for power
+unsigned char silenceCount = 0;
+
   
 //---------------------------------------------------------------- KNN setup  ----------------------------------------------------------------//
 // create KNN classifier, input will be array of 128 floats
@@ -96,7 +103,7 @@ void setup() {
   }
 
   // This pulls in all the operation implementations we need.
-  static tflite::AllOpsResolver resolver;             ///////<<<<<<<<<<<<<<<<<<<-------------------------------------------------------------SET ONLY REQUIRED OPS!!!
+  static tflite::AllOpsResolver resolver;             ///////<<<<<<<<<<<<<<<<<<<-------------------------------------------------------------------------SET ONLY REQUIRED OPS!!!
 
   // Build an interpreter to run the model with.
   static tflite::MicroInterpreter static_interpreter(model, resolver, tensor_arena, kTensorArenaSize);
@@ -128,12 +135,72 @@ void setup() {
 
   // initialize the LED as an output:
   pinMode(LED_PIN, OUTPUT);
-
+  pinMode(PW_LED_PIN, OUTPUT);
+  
 }
 
 
 void loop() {
+
+  //define variables for IMU reads
+  int16_t acc[3], gyro[3];
   
+  
+  //if class 1 (silence) is detected more than 5 times go to sleep
+  if(silenceCount == 5){
+    MicroPrintf("-----------SLEEP MODE-----------");
+    digitalWrite(PW_LED_PIN, LOW);
+
+    power = 0;
+    unsigned long sampCount = 0;
+    
+    //turn of gyro and set accel to 10Hz to save power
+    IMU.setAccelODR(1);
+    IMU.setGyroODR(0);
+
+    //stay in sleep until power is higher than threshold
+    do{
+
+      if (IMU.accelAvailable()) {
+        //read only accelerometer data
+        IMU.readRawAccelArr(acc);
+
+        sampCount ++;
+        double aux = ((double)(acc[0]) / 16384)* ((double)(acc[0]) / 16384);
+        //power += (aux - power)/sampCount;
+        power = aux;
+        
+        sampCount ++;
+        aux = ((double)(acc[1]) / 16384)* ((double)(acc[1]) / 16384);
+        //power += (aux - power)/sampCount;
+        power += aux;
+        
+        sampCount ++;
+        aux = ((double)(acc[2]) / 16384)* ((double)(acc[2]) / 16384);
+        //power += (aux - power)/sampCount;
+        power += aux;
+
+        power /=3;
+
+        //LowPower.idle(95);//sleep for 95ms to get 10Hz refresh rate
+        delay(100);
+
+        //#ifdef DEBUG
+        Serial.print("Power: ");
+        Serial.println(power,20);
+        Serial.print("Threshold: ");
+        Serial.println(thresholdPower,20);
+        //#endif
+      }
+
+    }while(power < thresholdPower || sampCount < 61);
+
+    silenceCount = 0;
+    digitalWrite(PW_LED_PIN, HIGH);
+    IMU.setAccelODR(4);
+    IMU.setGyroODR(4);
+  }
+
   char inputStr[16] = ""; 
   Serial.readBytesUntil('\n', inputStr, 15);
 
@@ -150,14 +217,9 @@ void loop() {
   MicroPrintf("-----------Acquiring data-----------");
   unsigned long startTimeAcquisition = millis();
 
-  
-
-  
-  //define variables for IMU reads
-  int16_t acc[3], gyro[3];
-
-  // Read samples until it gets to the Nsamples value
+  // Read samples until it gets to the MAX_SAMPLES value
   int sample_count = 0;
+  power = 0;
   while (sample_count < MAX_SAMPLES) {
 
     if (IMU.accelAvailable() && IMU.gyroAvailable()) {
@@ -187,11 +249,15 @@ void loop() {
         Serial.print(", ");
       #endif
 
+      power += data[0][sample_count]*data[0][sample_count] + 
+               data[1][sample_count]*data[1][sample_count] + 
+               data[2][sample_count]*data[2][sample_count];
+
       sample_count++;
     }
   }
-
-  
+  //divide power by the number of samples for later
+  power /= (MAX_SAMPLES * 3);
   
   #ifdef DEBUG
     Serial.println("");
@@ -201,8 +267,11 @@ void loop() {
         Serial.print(", ");
     }
 
-    Serial.println("");*/
+    Serial.println("");
   #endif
+    Serial.print("Current power measured: ");
+    Serial.println(power, 20);
+  
   
   MicroPrintf("Duration: %u\n", millis()-startTimeAcquisition);
   
@@ -222,7 +291,7 @@ void loop() {
       Serial.print(", ");
     }
 
-    Serial.println("");*/
+    Serial.println("");
   #endif
   
   MicroPrintf("Duration: %u", millis()-startTimeFFT);
@@ -258,13 +327,12 @@ void loop() {
   float *y = output->data.f;
 
   #ifdef DEBUG
-  for(int i = 0; i < 128; i++){
-    Serial.print(y[i]);
-    Serial.print(", ");
-  }
-  Serial.println("");
+    for(int i = 0; i < 128; i++){
+      Serial.print(y[i]);
+      Serial.print(", ");
+    }
+    Serial.println("");
   #endif
-  
   
   
 
@@ -295,7 +363,14 @@ void loop() {
     else{
       MicroPrintf("Not enough samples for inference");
     }
-    
+
+    if(personLabel == 1){
+      thresholdPower =  thresholdPower * 0.9 + power * 0.1;
+      silenceCount++;
+    }else{
+      silenceCount = 0;
+    }
+
   }
 
   MicroPrintf("Duration: %u\n", millis()-startTimeKNN);

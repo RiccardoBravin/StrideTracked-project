@@ -1,7 +1,7 @@
 /*
   Contains the function that is called by the C++ code to visualize the result of inference using 
   the Arduino's built-in LED. 
-  Also contains the code to read the shield button and switch between inference and training mode.
+  Also contains other helpful functions
 */
 
 
