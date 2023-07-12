@@ -66,7 +66,7 @@ KNNClassifier myKNN(128);
 
 
 void setup() {
-
+  
   //---------------------------------------------------------------- IMU setup  ----------------------------------------------------------------//
   if (!IMU.begin()) {
     MicroPrintf("Failed to initialize IMU!");
@@ -103,8 +103,19 @@ void setup() {
   }
 
   // This pulls in all the operation implementations we need.
-  static tflite::AllOpsResolver resolver;             ///////<<<<<<<<<<<<<<<<<<<-------------------------------------------------------------------------SET ONLY REQUIRED OPS!!!
-
+  //static tflite::AllOpsResolver resolver;
+  static tflite::MicroMutableOpResolver<10> resolver; 
+  resolver.AddConv2D();
+  resolver.AddRelu();
+  resolver.AddFullyConnected();
+  resolver.AddSoftmax();
+  resolver.AddReshape();
+  resolver.AddQuantize();
+  resolver.AddMul();
+  resolver.AddAdd();
+  resolver.AddMean();
+  resolver.AddDequantize();
+  
   // Build an interpreter to run the model with.
   static tflite::MicroInterpreter static_interpreter(model, resolver, tensor_arena, kTensorArenaSize);
   interpreter = &static_interpreter;
@@ -147,10 +158,13 @@ void loop() {
   
   
   //if class 1 (silence) is detected more than 5 times go to sleep
-  if(silenceCount == 5){
+  if(silenceCount > 8){
     MicroPrintf("-----------SLEEP MODE-----------");
     digitalWrite(PW_LED_PIN, LOW);
-
+    digitalWrite(22,HIGH);
+    digitalWrite(23,HIGH);
+    digitalWrite(24,HIGH);
+    
     power = 0;
     unsigned long sampCount = 0;
     
@@ -183,14 +197,14 @@ void loop() {
         power /=3;
 
         //LowPower.idle(95);//sleep for 95ms to get 10Hz refresh rate
-        delay(100);
+        delay(200);
 
-        //#ifdef DEBUG
-        Serial.print("Power: ");
-        Serial.println(power,20);
-        Serial.print("Threshold: ");
-        Serial.println(thresholdPower,20);
-        //#endif
+        #ifdef DEBUG
+          Serial.print("Power: ");
+          Serial.println(power,20);
+          Serial.print("Threshold: ");
+          Serial.println(thresholdPower,20);
+        #endif
       }
 
     }while(power < thresholdPower || sampCount < 61);
@@ -268,10 +282,10 @@ void loop() {
     }
 
     Serial.println("");
-  #endif
+  
     Serial.print("Current power measured: ");
     Serial.println(power, 20);
-  
+  #endif
   
   MicroPrintf("Duration: %u\n", millis()-startTimeAcquisition);
   
